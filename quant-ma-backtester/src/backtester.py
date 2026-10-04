@@ -77,8 +77,13 @@ def run_backtest(prices: list[PriceBar], config: BacktestConfig) -> list[dict[st
     buy_hold_value = config.initial_capital
     previous_signal = 0
 
+    start_index = config.long_window - 1
+
     for index, bar in enumerate(prices):
-        market_return = 0.0 if index == 0 else bar.close / prices[index - 1].close - 1
+        if index < start_index:
+            continue
+
+        market_return = 0.0 if index == start_index else bar.close / prices[index - 1].close - 1
         position = previous_signal
         strategy_return = position * market_return
         strategy_value *= 1 + strategy_return
@@ -106,10 +111,15 @@ def run_backtest(prices: list[PriceBar], config: BacktestConfig) -> list[dict[st
 
 
 def calculate_metrics(rows: list[dict[str, float | int | date | None]], initial_capital: float) -> dict[str, float]:
-    strategy_returns = [float(row["strategy_return"]) for row in rows]
-    market_returns = [float(row["market_return"]) for row in rows]
+    # Exclude the first row (initialization day) for statistical metrics to avoid an artificial 0 return
+    active_rows = rows[1:] if len(rows) > 1 else rows
+
+    strategy_returns = [float(row["strategy_return"]) for row in active_rows]
+    market_returns = [float(row["market_return"]) for row in active_rows]
+
     strategy_values = [float(row["strategy_value"]) for row in rows]
     buy_hold_values = [float(row["buy_hold_value"]) for row in rows]
+
     running_peak = strategy_values[0]
     drawdowns: list[float] = []
 
@@ -128,7 +138,7 @@ def calculate_metrics(rows: list[dict[str, float | int | date | None]], initial_
         "annualized_volatility_pct": volatility * 100,
         "max_drawdown_pct": min(drawdowns) * 100,
         "sharpe_ratio": sharpe_ratio,
-        "time_in_market_pct": mean(float(row["position"]) for row in rows) * 100,
+        "time_in_market_pct": mean(float(row["position"]) for row in active_rows) * 100,
         "average_daily_buy_hold_return_pct": mean(market_returns) * 100,
     }
 
